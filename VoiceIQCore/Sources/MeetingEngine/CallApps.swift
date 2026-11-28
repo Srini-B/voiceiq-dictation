@@ -65,6 +65,9 @@ enum CallApps {
         "vc.feishu.cn", "meetings.dialpad.com", "app.dialpad.com", "8x8.vc/", "meetings.vonage.com", "app.vonage.com",
         "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
     ]
+    /// Call sites that are mostly chats: a page of theirs is the call only
+    /// when no other call page is open (Fable on #146).
+    static let chatPages = ["web.whatsapp.com", "web.telegram.org", "messenger.com", "discord.com/channels"]
     /// Addresses of a joined call room, where sound alone is a call: an owner
     /// who joined muted holds no mic. Not a site's home or post-call page
     /// ("meet.google.com/" with no code, "meet.jit.si/static/…"), not Zoom's

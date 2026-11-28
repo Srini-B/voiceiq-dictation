@@ -132,7 +132,8 @@ public enum MeetingNotesPrompt {
     /// 2026-11-28, an English AMI meeting a Portuguese title, each time the
     /// recognizer was unsure and the request left the language to the model.
     static func outputLanguage(_ transcript: [TranscriptSegment], preferred code: String?) -> String {
-        let name = { (code: String) in Locale(identifier: "en").localizedString(forLanguageCode: code) }
+        // By the language alone: NLLanguageRecognizer says "zh-Hans" and "zh-Hant".
+        let name = { (code: String) in Locale(identifier: "en").localizedString(forLanguageCode: String(code.prefix { $0 != "-" && $0 != "_" })) }
         let preferred = code.flatMap(name) ?? "English"
         let text = transcript.map(\.text).joined(separator: " ")
         // By word boundaries, not spaces: Chinese and Japanese put none between words (Codex on #146).

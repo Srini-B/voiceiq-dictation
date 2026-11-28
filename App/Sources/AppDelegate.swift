@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.ui.error("app icon NOT set — url: \(Bundle.main.url(forResource: "VoiceIQ", withExtension: "icns")?.path ?? "nil", privacy: .public)")
         }
         FontLoader.registerBundledFonts()
+        // A meeting that crashed or quit mid-read can leave Chrome's page tree open.
+        Task.detached(priority: .utility) { if AXIsProcessTrusted() { ScreenNameSampler.endLeftoverPulse() } }
         // Before sync starts, so the cleanup goes up with the first merge.
         EditLearner.pruneOrdinaryAutoLearnedOnce()
         // Dictionary and writing rules shared with the iPhone through iCloud; always on.

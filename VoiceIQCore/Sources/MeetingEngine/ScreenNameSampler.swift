@@ -100,7 +100,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
     static func callPID(bundleID: String) -> (pid: pid_t, joined: Bool)? {
         let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
         guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first.map { ($0, true) } }
-        let windows = Dictionary(uniqueKeysWithValues: pids.map { ($0, CallWindowText.callWindowFrames(pid: $0)) })
+        let windows = Dictionary(pids.map { ($0, CallWindowText.callWindowFrames(pid: $0)) }, uniquingKeysWith: { first, _ in first })
         let joined = Set(pids.filter { windows[$0]?.joined.isEmpty == false })
         let rooms = joined.isEmpty ? Set(pids.filter { windows[$0]?.pages.isEmpty == false }) : joined
         guard !rooms.isEmpty else { return nil }
@@ -167,7 +167,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
                     }
                 }
                 let ours = pulsedPID.withLock { $0 } == pid
-                if browser, chromium?.isChromium == true, ours || !Self.webTreeIsOpen(pid) {
+                if browser, chromium?.isChromium == true, ours || Self.webTreeIsOpen(pid) == false {
                     if tick % Self.browserTreeEvery == 0 {
                         // The snapshot first, so samples stay in time order.
                         if looked { record(lines, at: time); looked = false }
@@ -245,22 +245,32 @@ public final class ScreenNameSampler: @unchecked Sendable {
         return off
     }
 
-    static func webTreeIsOpen(_ pid: pid_t) -> Bool {
+    /// Nil when the read fails or times out: the setting may be another
+    /// tool's, and a pulse would switch it off under them (Fable on #146).
+    static func webTreeIsOpen(_ pid: pid_t) -> Bool? {
         if NSWorkspace.shared.isVoiceOverEnabled { return true }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
         var value: CFTypeRef?
-        return AXUIElementCopyAttributeValue(app, enhancedUI, &value) == .success && (value as? Bool) == true
+        switch AXUIElementCopyAttributeValue(app, enhancedUI, &value) {
+        case .success: return (value as? Bool) == true
+        case .attributeUnsupported, .noValue: return false
+        default: return nil
+        }
     }
 
-    /// Switches off a pulse a crashed sampler left on, if that browser still runs.
-    static func endLeftoverPulse() {
+    /// Switches off a pulse a crashed or quit app left on, if that browser
+    /// still runs. Called at launch and when a sampler starts; off the main
+    /// thread, since Chrome can take up to the timeout to answer.
+    public static func endLeftoverPulse() {
         let pid = pid_t(UserDefaults.standard.integer(forKey: pulsedKey))
         guard pid > 0 else { return }
         UserDefaults.standard.removeObject(forKey: pulsedKey)
-        // The pid may now be another app's.
-        guard isChromium(pid) else { return }
-        AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), enhancedUI, kCFBooleanFalse)
+        // The pid may now be another app's; under VoiceOver the tree stays open anyway.
+        guard isChromium(pid), !NSWorkspace.shared.isVoiceOverEnabled else { return }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 1)
+        AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanFalse)
     }
 
     // Computed: a stored static CFString is not Sendable under Swift 6.

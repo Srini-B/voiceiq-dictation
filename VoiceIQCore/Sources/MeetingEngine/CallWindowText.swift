@@ -38,9 +38,10 @@ enum CallWindowText {
         guard var windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return [] }
         if browser {
             windows = windows.filter(isMeeting)
-            // A joined room wins over the browser's other call-site pages, which include chats (Codex on #146).
-            let rooms = windows.filter(isJoinedRoom)
-            if !rooms.isEmpty { windows = rooms }
+            // A joined room wins over the browser's other call-site pages, and
+            // those over chat sites (Codex and Fable on #146).
+            let rooms = windows.filter(isJoinedRoom), calls = windows.filter { !isChat($0) }
+            windows = !rooms.isEmpty ? rooms : !calls.isEmpty ? calls : windows
         }
         let deadline = Date().addingTimeInterval(timeBudget)
         var budget = elementBudget
@@ -71,8 +72,9 @@ enum CallWindowText {
 
     /// Frames, in global screen points, of the app's windows whose front tab
     /// is a call: `joined`, a joined call room (`CallApps.isCallRoom`);
-    /// `pages`, any call site's page, which includes a Teams or WhatsApp chat
-    /// (Codex on #146). A browser's window title is the page's own, so its
+    /// `pages`, any call site's page, which includes a Teams chat (Codex on
+    /// #146); a chat site's (WhatsApp, Discord) only when no other is open
+    /// (Fable on #146). A browser's window title is the page's own, so its
     /// address (AXDocument) says which. Frames, not titles, pick the
     /// ScreenCaptureKit window: MEASURED 2026-11-28, Chrome on vdo.ninja,
     /// Accessibility titles the window "Owner – Audio playing - Google
@@ -84,14 +86,14 @@ enum CallWindowText {
         guard AXIsProcessTrusted() else { return ([], []) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
-        var joined: [CallWindow] = [], pages: [CallWindow] = []
+        var joined: [CallWindow] = [], calls: [CallWindow] = [], chats: [CallWindow] = []
         for window in value(app, kAXWindowsAttribute) as? [AXUIElement] ?? [] where isMeeting(window) {
             guard let frame = frame(window) else { continue }
             let found = CallWindow(frame: frame, title: value(window, kAXTitleAttribute) as? String ?? "")
-            pages.append(found)
+            if isChat(window) { chats.append(found) } else { calls.append(found) }
             if isJoinedRoom(window) { joined.append(found) }
         }
-        return (joined, pages)
+        return (joined, calls.isEmpty ? chats : calls)
     }
 
     private static func frame(_ window: AXUIElement) -> CGRect? {
@@ -130,6 +132,11 @@ enum CallWindowText {
     private static func isMeeting(_ window: AXUIElement) -> Bool {
         let strings = [kAXTitleAttribute as String, kAXDocumentAttribute as String].compactMap { value(window, $0) as? String }
         return CallApps.meetingPages.contains { page in strings.contains { $0.localizedCaseInsensitiveContains(page) } }
+    }
+
+    private static func isChat(_ window: AXUIElement) -> Bool {
+        let strings = [kAXTitleAttribute as String, kAXDocumentAttribute as String].compactMap { value(window, $0) as? String }
+        return CallApps.chatPages.contains { page in strings.contains { $0.localizedCaseInsensitiveContains(page) } }
     }
 
     private static func value(_ element: AXUIElement, _ key: String) -> CFTypeRef? {
