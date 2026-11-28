@@ -78,6 +78,75 @@ final class TidyTests: XCTestCase {
         }
     }
 
+    /// The disfluencies Hex's cleanup guard admits (CleanupGuard.swift,
+    /// guard_tests.rs at a0f0a858 and e27726790), each beside the near miss
+    /// that must stay. Input is punctuated as a cloud transcript arrives.
+    func testCommaSetFillersGoWithTheirCommas() {
+        for (said, written) in [
+            ("I like it, like, a lot.", "I like it a lot."),
+            ("I went, like, to the store.", "I went to the store."),
+            ("It was, you know, pretty late.", "It was pretty late."),
+            ("Like, I don't know.", "I don't know."),
+            // A clause of one word keeps its comma, and so does one before a name.
+            ("So, like, we should go.", "So, we should go."),
+            ("I told Sam, like, Priya said no.", "I told Sam, Priya said no."),
+        ] {
+            XCTAssertEqual(tidy(said), written, said)
+        }
+        // "like" as the verb or "such as", a list, a question tag.
+        for kept in ["It was like a dream.", "Arrange the folders like we did yesterday.", "Like, comment and share.",
+                     "Please share, like, and comment.", "Wait, you know, right?"] {
+            XCTAssertEqual(tidy(kept), kept)
+        }
+    }
+
+    func testRepeatsGoOnlyWhereNoWordIsMeantTwice() {
+        for (said, written) in [
+            ("I I think so.", "I think so."),
+            ("Put it on the the shelf.", "Put it on the shelf."),
+            ("We went to the, the office.", "We went to the office."),
+            ("The, the office is closed.", "The office is closed."),
+            ("In the, in the morning, we left.", "In the morning, we left."),
+            ("Um, we we should, uh, leave.", "We should leave."),
+            ("w- we should go", "We should go."),
+        ] {
+            XCTAssertEqual(tidy(said), written, said)
+        }
+        // Grammatical pairs, emphasis, names, distinct list items and compounds.
+        for kept in ["I had had enough.", "I know that that works.", "Whatever you do, do it well.",
+                     "That was really, really good.", "No, no, no.", "Priya, Priya, are you there?",
+                     "Will, Will, are you there?", "A box of red pencils, a box of blue pencils.",
+                     "Pack a bag of tea, a bag of tea.", "Tell Hye-jin I said thanks."] {
+            XCTAssertEqual(tidy(kept), kept)
+        }
+    }
+
+    func testFalseStartsGoWhenTheQuestionRestarts() {
+        for (said, written) in [
+            ("Did you, have you seen it?", "Have you seen it?"),
+            ("Did you, did you see it?", "Did you see it?"),
+            ("So, can you, could you send it?", "So, could you send it?"),
+            // What is left is asked: the question mark comes after the false start goes.
+            ("Can you, would you open it", "Would you open it?"),
+        ] {
+            XCTAssertEqual(tidy(said), written, said)
+        }
+        for kept in ["If you can, call me.", "When you can, can you call me?"] {
+            XCTAssertEqual(tidy(kept), kept)
+        }
+    }
+
+    /// "I mean" is left to `SpokenRepairs`, which resolves only a like-for-like
+    /// correction, and quoted words are kept as said.
+    func testIMeanAndQuotedWordsStayAsSaid() {
+        XCTAssertEqual(tidy("Let's meet Monday, I mean, Tuesday."), "Let's meet Tuesday.")
+        for kept in ["It's good. I mean, really good.", "We met on Friday, I mean, Monday works too.",
+                     "It was, I mean, pretty good.", "He wrote \"the the\" on the board.",
+                     "She said \"I went, like, home\" and left."] {
+            XCTAssertEqual(tidy(kept), kept)
+        }
+    }
+
     func testSpokenLayout() {
         XCTAssertEqual(SpokenMarks.layout(in: "Hello. New line. Next"), "Hello.\nNext")
         XCTAssertEqual(SpokenMarks.layout(in: "One. New paragraph. Two."), "One.\n\nTwo.")
