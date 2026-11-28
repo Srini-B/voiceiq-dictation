@@ -58,8 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MeetingFolderSync.shared.start()
         // Each finished meeting as Markdown in the user's folder, while Settings has one.
         MeetingMarkdownFiles.follow(MeetingStore())
-        // The local API and MCP server for coding agents, while Settings has it on.
-        AgentServer.shared.followSettings()
+        // The local API and MCP server for coding agents, while Settings has it
+        // on. Not in a test copy: with its fresh settings it would remove the
+        // real app's entry from the user's agent configs (Fable on #161).
+        if FileLayout.testDataFolder == nil { AgentServer.shared.followSettings() }
         let controller = DictationController()
         statusItemController = StatusItemController(
             onOpenHistory: { [weak controller] in controller?.openHistory() },

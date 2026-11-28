@@ -142,3 +142,66 @@ Keep the files outside ~/Documents, ~/Desktop and ~/Downloads, for example in
 /Users/Shared. The files are opened on the main thread, and opening one in a
 privacy-protected folder can wait on a permission prompt and hang the app at
 "warming".
+
+## Test mode
+
+A test copy of the app sets two defaults, so nothing it records reaches the
+owner's iCloud or the real app's data:
+
+```sh
+defaults write io.blue.voiceiq.probe DebugDisableCloudSync -bool true
+defaults write io.blue.voiceiq.probe DebugDataFolder /Users/Shared/voiceiq-probe-data
+# launch the copy; its menu shows "Sync off (test)" and "Data in … (test)"
+```
+
+| Default | What it does | Platforms |
+| --- | --- | --- |
+| `DebugDisableCloudSync` | None of the five syncs starts: meetings and History (CloudKit), the Dictionary, writing rules and meeting folders (iCloud key-value storage). | Mac, iPhone |
+| `DebugDataFolder` | An absolute path that replaces ~/Library/Application Support/VoiceiQ for everything the app stores. | Mac |
+
+Both are read once, at launch, from the app's own defaults domain, so
+`defaults delete <domain>` turns them off too. Check the menu lines after a
+reset. Each is logged (`iCloud sync off: DebugDisableCloudSync is set`,
+`data folder (test): <path>`) and shown on screen: in the Mac menu under the
+status line, and "Sync off (test)" under the version in the iPhone's
+Settings. There is no user-facing switch. A `DebugDataFolder` that is not an
+absolute path is ignored and logged as an error.
+
+Why both: VoiceiQ is not sandboxed, so a copy under another bundle ID, such as
+the live-call probe's ~/Applications/VoiceiQ-probe.app (io.blue.voiceiq.probe,
+ad hoc signed without the iCloud entitlement), still writes into the real
+folder by default. The real app then uploads those meetings at its next
+launch. The data folder is never derived from the bundle ID: on iOS the app,
+its keyboard and its Live Activity share an App Group under different IDs.
+
+### What the sync switch does not cover
+
+It defers sync; it does not isolate the run. Changes made while it is set stay
+on the device and go up once sync is back on: new and edited dictations and
+meetings, Dictionary terms (auto-learned ones too), writing rules and folders.
+So on the real app, delete a test's dictations and meetings before deleting the
+default. Two things never catch up:
+- A dictation that was already in iCloud and is deleted (or cleared with
+  Clear all) while the switch is on stays in iCloud and on other devices.
+  Delete already-synced dictations with sync on.
+- Meetings written as Markdown files (Settings, off by default) still go to
+  the chosen folder, which may be in iCloud Drive.
+
+### What a test copy still shares with the real app
+
+- The debug log in ~/Library/Logs/VoiceiQ, and its on/off switch, which a copy
+  reads from the real app's defaults domain.
+- The Keychain.
+- The temporary folder: each app's launch cleanup removes the other's
+  in-progress playback renders.
+- The prepared-model cache. With `DebugDataFolder` set the copy does not clear
+  it at launch, and it does not start the agent server or touch the user's
+  agent configs (~/.claude.json and the others). Its Settings still act on the
+  shared state when clicked: the Coding agents buttons (Set Up, Update,
+  Remove, New Key…) change the real agent configs and Keychain key, and
+  deleting a model clears the shared cache. Leave them alone in a test copy.
+
+Start the data folder empty, or copy the whole real folder. Never copy
+history.sqlite alone: its rows hold absolute paths to recordings, and a delete,
+a retry or retention in the copy would then change the real files. The example
+path in /Users/Shared is readable by other accounts on the Mac.

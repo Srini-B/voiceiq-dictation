@@ -39,12 +39,12 @@ public final class WritingRulesSync {
     /// The store holds 1 MB in total and the dictionary may use most of it.
     static let maxBytes = 64_000
 
-    private var started = false
+    private(set) var started = false
 
     private init() {}
 
     public func start() {
-        guard !started else { return }
+        guard !started, !CloudSync.isDisabledForTests else { return }
         started = true
         let store = NSUbiquitousKeyValueStore.default
         NotificationCenter.default.addObserver(
