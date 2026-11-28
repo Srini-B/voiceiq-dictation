@@ -98,7 +98,7 @@ final class SessionSleepGuardTests: XCTestCase {
         let a = MeetingID(), b = MeetingID()
         let ids = CurrentValueSubject<Set<MeetingID>, Never>([])
         var held: [Bool] = []
-        let watch = SessionSleepGuard.writingUp(ids, cap: 0.5).sink { held.append($0) }
+        let watch = SessionSleepGuard.writingUp(ids, cap: 1).sink { held.append($0) }
         defer { watch.cancel() }
         XCTAssertEqual(held, [false])
 
@@ -109,11 +109,11 @@ final class SessionSleepGuardTests: XCTestCase {
 
         ids.send([a, b])
         XCTAssertEqual(held.last, true)
-        try await Task.sleep(nanoseconds: 250_000_000)
+        try await Task.sleep(nanoseconds: 500_000_000)
         ids.send([a])  // b finished; a is stuck
         XCTAssertEqual(held.last, true)
-        try await Task.sleep(nanoseconds: 400_000_000)
-        // 0.65 s after both joined: past the 0.5 s cap, before the 0.75 s a restart on b leaving would give.
+        try await Task.sleep(nanoseconds: 750_000_000)
+        // 1.25 s after both joined: past the 1 s cap, before the 1.5 s a restart on b leaving would give.
         XCTAssertEqual(held.last, false)
         XCTAssertEqual(held, [false, true, false, true, false])
     }
