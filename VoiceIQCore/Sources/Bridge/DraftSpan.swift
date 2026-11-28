@@ -62,6 +62,7 @@ public struct FieldEdit: Equatable, Sendable {
         self.location = location
         self.removed = removed
         self.inserted = inserted
+        earliest = location
     }
 
     public init?(from old: String, to new: String) {
@@ -76,7 +77,19 @@ public struct FieldEdit: Equatable, Sendable {
         location = prefix
         removed = a.count - prefix - suffix
         inserted = String(decoding: b[prefix..<(b.count - suffix)], as: UTF16.self)
+        // The same change read from the end first: with repeated text
+        // ("Hello Hello " → "Hello ") it can sit further left, and which
+        // copy changed can't be told.
+        var endFirst = 0
+        while endFirst < a.count, endFirst < b.count, a[a.count - 1 - endFirst] == b[b.count - 1 - endFirst] {
+            endFirst += 1
+        }
+        earliest = max(0, min(prefix, a.count - endFirst - removed))
     }
+
+    /// The leftmost place the same change could have been made; equal to
+    /// `location` when the change can only be in one place.
+    public var earliest: Int
 
     public var insertedLength: Int { inserted.utf16.count }
 }
@@ -139,6 +152,12 @@ public struct DraftLedger: Equatable, Sendable {
         let editEnd = edit.location + edit.removed
         for (id, span) in drafts {
             var moved = span
+            // The change could be anywhere from `earliest` to its end: a
+            // draft in that stretch may be the copy that changed.
+            if edit.earliest < edit.location, span.location < editEnd, span.end > edit.earliest {
+                drafts[id] = nil
+                continue
+            }
             if editEnd <= span.location {
                 // Wholly before it; an insert at its first character counts as before.
                 moved.location += edit.insertedLength - edit.removed

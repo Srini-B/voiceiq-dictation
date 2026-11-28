@@ -96,6 +96,32 @@ final class DraftLedgerTests: XCTestCase {
         XCTAssertNotNil(ledger.draft(a))
     }
 
+    /// A draft next to the same words: deleting one copy can't be told
+    /// apart from deleting the other, so the draft is dropped and the
+    /// remaining text, whichever copy it is, is never written over.
+    func testDeletingNextToAnIdenticalCopyDropsTheDraft() {
+        var ledger = DraftLedger(value: "Hello ")
+        XCTAssertNotNil(ledger.add(a, text: "Hello ", at: 0, over: 0, landedIn: "Hello Hello "))
+        ledger.observe("Hello ")
+        XCTAssertNil(ledger.draft(a))
+    }
+
+    /// Typing next to an identical copy is just as ambiguous.
+    func testTypingInsideRepeatedTextDropsADraftThere() {
+        var ledger = DraftLedger(value: "aa")
+        XCTAssertNotNil(ledger.add(a, text: "aa", at: 2, over: 0, landedIn: "aaaa"))
+        ledger.observe("aaaaa")
+        XCTAssertNil(ledger.draft(a))
+    }
+
+    /// An unambiguous edit far from the repeated text still keeps the draft.
+    func testAnUnambiguousEditKeepsTheDraft() {
+        var ledger = DraftLedger(value: "Hello ")
+        XCTAssertNotNil(ledger.add(a, text: "Hello ", at: 0, over: 0, landedIn: "Hello Hello "))
+        ledger.observe("Hello Hello !")
+        XCTAssertEqual(ledger.draft(a), DraftSpan(location: 0, text: "Hello "))
+    }
+
     /// A change that is not exactly this dictation's insert records nothing.
     func testAddRejectsAChangeThatIsNotItsInsert() {
         var ledger = DraftLedger(value: "Hi")
