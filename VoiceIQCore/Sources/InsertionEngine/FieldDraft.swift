@@ -269,8 +269,8 @@ public final class FieldDraft: TextDraft {
         /// the draft selected as this swap left it: a caret the user moved
         /// meanwhile stays where they put it.
         func restoreIfStillSelected() async {
-            guard let now = PasteCheck.reading(of: element), now.caret == span.location,
-                  now.selectionLength == span.length else { return }
+            guard let now = PasteCheck.reading(of: element), now.value == reading.value,
+                  now.caret == span.location, now.selectionLength == span.length else { return }
             _ = await select(reading.caret, reading.selectionLength)
         }
         guard await select(span.location, span.length, holding: reading.value) else {

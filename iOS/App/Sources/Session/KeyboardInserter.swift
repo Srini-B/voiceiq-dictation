@@ -115,6 +115,9 @@ private final class KeyboardTextDraft: TextDraft {
         return true
     }
 
+    /// The keyboard types a draft on its own once offered; nothing to stop here.
+    func stopShowing() {}
+
     func end() {
         ended = true
         withdraw()

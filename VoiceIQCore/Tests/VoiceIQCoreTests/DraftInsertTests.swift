@@ -30,6 +30,7 @@ final class DraftInsertTests: XCTestCase {
         }
         func show(_ text: String) async -> DraftShown { events.append("show \(text)"); return shows }
         func replace(with text: String) async -> Bool { events.append("replace \(text)"); return replaces }
+        func stopShowing() {}
         func end() { events.append("end") }
     }
 
@@ -211,6 +212,7 @@ final class DraftInsertTests: XCTestCase {
             field.ledger.replace(id, with: text, landedIn: new)
             return true
         }
+        func stopShowing() {}
         func end() { field.ledger.remove(id) }
     }
 

@@ -58,5 +58,7 @@ private final class LearningDraft: TextDraft {
         return replaced
     }
 
+    func stopShowing() { draft.stopShowing() }
+
     func end() { draft.end() }
 }

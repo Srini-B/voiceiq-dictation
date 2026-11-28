@@ -166,9 +166,6 @@ public protocol TextDraft: AnyObject {
     func stopShowing()
 }
 
-public extension TextDraft {
-    func stopShowing() {}
-}
 
 public enum DraftShown: Equatable, Sendable {
     /// In the field, and found again for the replace.
