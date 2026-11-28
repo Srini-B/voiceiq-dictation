@@ -7,7 +7,13 @@ and exports it. Meetings are transcribed by AssemblyAI's pre-recorded STT-3.7
 (Universal-2 for languages it lacks), always from the saved tracks
 after the recording stops; there is no live transcript while a meeting
 records. Notes and meeting chat come from the writing model (`gpt-6-luna`)
-on AssemblyAI's LLM Gateway, which needs a balance on the account. There is
+on AssemblyAI's LLM Gateway, which needs a balance on the account. Notes ask
+GPT-6 models for reasoning effort medium (dictation and chat ask for none),
+so the notes name far-side voices the same way from run to run and assign
+owners correctly; they take about 40 s, in the background, and allow up to
+32,000 output tokens, reasoning included. A reply cut off at that limit
+fails the notes, with its own message, instead of being asked again. Each
+notes request has 15 minutes, rate-limit waits included. There is
 no on-device meeting transcription; a meeting that cannot reach AssemblyAI waits
 with its audio and is sent when AssemblyAI can be reached ([ON_DEVICE.md](ON_DEVICE.md#meetings)). What is sent,
 and the notes prompt, are covered in
