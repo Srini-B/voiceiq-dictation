@@ -132,6 +132,15 @@ final class DictationLearningTests: XCTestCase {
         XCTAssertEqual(learned, ["GPT4 → GPT-4"])
     }
 
+    /// The fixed words appear twice in the dictation with the same words around them:
+    /// which one was fixed can't be told, so nothing is learned.
+    func testAFixWhoseWordsAppearTwiceInTheDictationIsSkipped() {
+        let learning = makeLearning()
+        dictate("I tested GPT 4 today. Then I tested GPT4 today.", into: learning)
+        leave(learning, as: "I tested GPT 4 today. Then I tested GPT-4", " today.")
+        XCTAssertEqual(learned, [])
+    }
+
     /// UIKit named no input session for the dictation, so the next field's text could
     /// read as an edit of it: it is not followed.
     func testADictationInAnUnnamedSessionIsNotFollowed() {

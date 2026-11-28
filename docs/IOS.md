@@ -847,8 +847,8 @@ goes to the app as a Dictionary word (`DictationLearning.fix`):
   anchors, never from the same words elsewhere), from the fix's first word to
   its last, so hyphens and dots inside it stay ("GPT4" → "GPT-4", not
   "GPT 4"). `DictionaryAddition.learnedFrom` is the dictated wording, read
-  back from the dictation the same way. A fix that can't be found there is
-  skipped, and so is one with a comma, a sentence or clause mark or a line
+  back from the dictation the same way. A fix that can't be found there, or
+  is there more than once with the same words around it, is skipped, and so is one with a comma, a sentence or clause mark or a line
   break between its words on either side, which the Mac splits into separate
   edits (`EditDiff.pieces`).
 - `DictionaryAddition.startsSentence` says whether it begins a sentence, as

@@ -54,7 +54,9 @@ Auto-learned section.
 - Read back only from the dictation's place: the term is found after Hex's
   anchor for the dictation in the span it last located, so earlier text with
   the same words ("I tested GPT 4 today.") is never used (Codex). A fix not
-  found there is skipped, and so is one with a comma, sentence or clause
+  found there, or found more than once with the same words around it (the
+  dictation itself says "GPT 4" before the "GPT4" that was fixed), is
+  skipped, and so is one with a comma, sentence or clause
   mark or line break between its words, which the Mac splits
   (`EditDiff.pieces`). The keyboard's sentence-start test follows the Mac's
   (list markers, a quotation opened after a comma). Known difference, on the
@@ -112,8 +114,9 @@ Auto-learned entries are vocabulary only (no `misspelling`, so never a
   a sentence start, and skips a second
   spelling learned from the same wording.
 - On Linux (Swift 6.2.1): `DictationLearningTests.swift` itself runs under
-  swift-corelibs-xctest against the vendored tracker and classifier, 10 of 10
-  passing; against the previous `DictationLearning` the window, span and
+  swift-corelibs-xctest against the vendored tracker and classifier, 11 of 11
+  passing (the dictation holding the fixed words twice hands over nothing;
+  before, "GPT4 → GPT 4"); against the previous `DictationLearning` the window, span and
   unnamed-session tests fail as reported ("Sharon → Sharo", "tomorrow →
   tomorro", "GPT4 → GPT 4", "Sharon → Saran"). Clause breaks ("Wispr, Flow"
   dropped; "GPT-3.5", "1,000" kept), list-marker and quoted sentence starts

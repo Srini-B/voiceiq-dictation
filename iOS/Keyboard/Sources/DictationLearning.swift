@@ -159,7 +159,8 @@ final class DictationLearning {
     /// in the dictation, each found between the dictated words around it. Hex's pairs are
     /// word tokens joined by spaces, so the text is taken from the first word's start to
     /// the last word's end, keeping what joins them ("GPT-4", not "GPT 4"). Nil when the
-    /// fix isn't in the dictation's place, or either side runs across a clause or
+    /// fix isn't in the dictation's place, is there more than once with the same words
+    /// around it (on either side), or either side runs across a clause or
     /// sentence break, which the Mac splits into separate edits (`EditDiff.pieces`).
     ///
     /// Hex lowers a capital that only starts a sentence ("Saran went home" teaches
@@ -170,38 +171,38 @@ final class DictationLearning {
     /// capital for a name, which can only skip a word, never learn an ordinary one.
     nonisolated static func fix(for pair: DictationEditPair, in field: String, from start: String.Index,
                                 dictated: String) -> Fix? {
-        guard let range = span(of: pair.meant, before: pair.before, after: pair.after, in: field, from: start)
-        else { return nil }
+        let fixed = spans(of: pair.meant, before: pair.before, after: pair.after, in: field, from: start)
+        let dictatedSpans = spans(of: pair.heard, before: pair.before, after: pair.after, in: dictated,
+                                  from: dictated.startIndex)
+        // Twice, with the same words around it: which one was fixed can't be told.
+        guard fixed.count == 1, let range = fixed.first, dictatedSpans.count <= 1 else { return nil }
         let term = String(field[range])
-        var heard = pair.heard
-        if let range = span(of: pair.heard, before: pair.before, after: pair.after, in: dictated,
-                            from: dictated.startIndex) {
-            heard = String(dictated[range])
-        }
+        let heard = dictatedSpans.first.map { String(dictated[$0]) } ?? pair.heard
         guard !crossesBreak(term), !crossesBreak(heard) else { return nil }
         let capitalRestored = pair.meant.first?.isLowercase == true && term.first?.isUppercase == true
         return Fix(heard: heard, term: term,
                    startsSentence: capitalRestored || startsSentence(at: range.lowerBound, in: field))
     }
 
-    /// Where the words of `phrase` are in `text`, ignoring case, with the word `before`
-    /// right before them and `after` right after (when given): from the first word's
-    /// start to the last word's end. Only words from `from` on.
-    private nonisolated static func span(of phrase: String, before: String?, after: String?,
-                                         in text: String, from: String.Index) -> Range<String.Index>? {
+    /// Everywhere the words of `phrase` are in `text`, ignoring case, with the word
+    /// `before` right before them and `after` right after (when given): from the first
+    /// word's start to the last word's end. Only words from `from` on.
+    private nonisolated static func spans(of phrase: String, before: String?, after: String?,
+                                          in text: String, from: String.Index) -> [Range<String.Index>] {
         let words = DictationText.words(in: text).filter { $0.range.lowerBound >= from }
         let key = DictationText.phraseKey(phrase)
         let count = DictationText.words(in: phrase).count
-        guard count > 0, words.count >= count else { return nil }
+        guard count > 0, words.count >= count else { return [] }
+        var found: [Range<String.Index>] = []
         for start in 0...(words.count - count) {
             let end = start + count
             guard words[start..<end].map({ DictationText.key($0.text) }).joined(separator: " ") == key,
                   before.map({ start > 0 && DictationText.key(words[start - 1].text) == DictationText.key($0) }) ?? true,
                   after.map({ end < words.count && DictationText.key(words[end].text) == DictationText.key($0) }) ?? true
             else { continue }
-            return words[start].range.lowerBound..<words[end - 1].range.upperBound
+            found.append(words[start].range.lowerBound..<words[end - 1].range.upperBound)
         }
-        return nil
+        return found
     }
 
     /// Whether a comma, a sentence or clause mark or a line break sits between two of the
